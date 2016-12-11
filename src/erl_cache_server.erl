@@ -205,10 +205,19 @@ do_evict(Name, Key) ->
 -spec purge_cache(erl_cache:name()) -> ok.
 purge_cache(Name) ->
     Now = now_ms(),
-    {Time, Deleted} = timer:tc(
-        ets, select_delete,
-        [get_table_name(Name), [{#cache_entry{evict='$1', _='_'}, [{'<', '$1', Now}], [true]}]]),
-    ?INFO("~p cache purged in ~pms", [Name, Time]),
+    TableName = get_table_name(Name),
+    %% make sure the table has not disappeared out from under us
+    case ets:info(TableName, type) of
+        undefined -> ok;
+        _ -> purge_cache( Name, TableName, Now )
+    end.
+
+purge_cache( Name, TableName, Now ) ->
+    {Time, Deleted} =
+        timer:tc( ets, select_delete,
+                  [TableName, [{#cache_entry{evict='$1', _='_'},
+                                [{'<', '$1', Now}], [true]}]] ),
+    ?INFO("~p cache purged in ~bms", [Name, Time]),
     gen_server:cast(Name, {increase_stat, evict, Deleted}),
     ok.
 
@@ -248,8 +257,15 @@ do_refresh(Name, #cache_entry{key=Key, validity_delta=ValidityDelta, evict_delta
 %% @private
 -spec check_mem_usage(erl_cache:name()) -> ok.
 check_mem_usage(Name) ->
+    TableName = get_table_name(Name),
+    %% make sure the table has not disappeared out from under us
+    case ets:info(TableName, memory) of
+        undefined -> ok;
+        CurrentWords -> check_mem_usage( Name, CurrentWords )
+    end.
+
+check_mem_usage( Name, CurrentWords ) ->
     MaxMB = erl_cache:get_cache_option(Name, max_cache_size),
-    CurrentWords = proplists:get_value(memory, ets:info(get_table_name(Name))),
     CurrentMB = erlang:trunc((CurrentWords * erlang:system_info(wordsize)) / (1024*1024*8)),
     case MaxMB /= undefined andalso CurrentMB > MaxMB of
         true ->
