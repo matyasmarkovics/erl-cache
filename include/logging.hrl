@@ -2,10 +2,10 @@
 %% Logging convenience functions
 %%============================================================================
 
--define(DEBUG(Msg, Args), _ = lager:log(debug, self(), Msg, Args)).
--define(INFO(Msg, Args), _ = lager:log(info, self(), Msg, Args)).
--define(NOTICE(Msg, Args), _ = lager:log(notice, self(), Msg, Args)).
--define(WARNING(Msg, Args), _ = lager:log(warning, self(), Msg, Args)).
--define(ERROR(Msg, Args), _ = lager:log(error, self(), Msg, Args)).
+-define(DEBUG(Msg, Args), _ = error_logger:info_msg(Msg, Args)).
+-define(INFO(Msg, Args), _ = error_logger:info_msg(Msg, Args)).
+-define(NOTICE(Msg, Args), _ = error_logger:warning_msg(Msg, Args)).
+-define(WARNING(Msg, Args), _ = error_logger:warning_msg(Msg, Args)).
+-define(ERROR(Msg, Args), _ = error_logger:error_msg(Msg, Args)).
 
 
