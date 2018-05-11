@@ -279,9 +279,11 @@ check_mem_usage( Name, CurrentWords ) ->
     ok.
 
 %% @private
--spec do_apply(mfa() | function()) -> term().
+-spec do_apply(function() | mfa() | {function(), [any()]}) -> term().
 do_apply({M, F, A}) when is_atom(M), is_atom(F), is_list(A) ->
     apply(M, F, A);
+do_apply({F, A}) when is_function(F, length(A)) ->
+    apply(F, A);
 do_apply(F) when is_function(F) ->
     F().
 
@@ -289,6 +291,8 @@ do_apply(F) when is_function(F) ->
 -spec is_error_value(erl_cache:is_error_callback(), erl_cache:value()) -> boolean().
 is_error_value({M, F, A}, Value) ->
     apply(M, F, [Value|A]);
+is_error_value({F, A}, Value) ->
+    apply(F, [Value|A]);
 is_error_value(F, Value) when is_function(F) ->
     F(Value).
 
