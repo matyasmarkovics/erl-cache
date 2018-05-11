@@ -88,7 +88,7 @@
                   | wait_until_done | evict_interval | error_validity | is_error_callback
                   | mem_check_interval | key_generation.
 
--type callback() :: function() | mfa().
+-type callback() :: function() | mfa() | {function(), [any()]}.
 
 -export_type([
         name/0, key/0, value/0, validity/0, evict/0, evict_interval/0, refresh_callback/0,
@@ -371,6 +371,10 @@ validate_value(Key, Opts, Defaults) when Key==refresh_callback; Key==is_error_ca
         undefined -> default(Key, Defaults);
         {M, F, A} when is_atom(M) andalso is_atom(F) andalso is_list(A) -> {M, F, A};
         Fun when is_function(Fun) -> Fun;
+        {Fun, Args} = FA
+          when is_function(Fun, length(Args)), Key==refresh_callback;
+               is_function(Fun, length(Args) + 1), Key==is_error_callback ->
+            FA;
         _ -> {invalid, Key}
     end;
 validate_value(Key, Opts, Defaults) when Key==validity; Key==evict_interval;

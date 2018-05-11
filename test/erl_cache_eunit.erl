@@ -118,7 +118,7 @@ refresh_overdue_async_mfa() ->
     ?assertEqual({error, not_found}, get_from_cache(test_key, [], 400)).
 
 refresh_overdue_sync_closure() ->
-    SetOpts = [{refresh_callback, fun() -> os:timestamp() end},
+    SetOpts = [{refresh_callback, {fun os:timestamp/0, []}},
                {validity, 50}, {evict, 300}],
     ?assertEqual({error, not_found}, get_from_cache(test_key, [], 1)),
     TestValue = os:timestamp(),
@@ -141,7 +141,7 @@ get_set_error() ->
     ?assertEqual({error, not_found}, get_from_cache(foo2, [])),
     set_in_cache(foo3, wrong, [{is_error_callback, {?MODULE, is_error, []}},
                                {error_validity, 1}, {wait_until_done, true}], 1),
-    set_in_cache(foo4, error, [{is_error_callback, {?MODULE, is_error, []}},
+    set_in_cache(foo4, error, [{is_error_callback, {fun is_error/1, []}},
                                {error_validity, 1}, {wait_until_done, true}], 1),
     ?assertEqual({error, not_found}, get_from_cache(foo3, [])),
     ?assertEqual({ok, error}, get_from_cache(foo4, [])).
