@@ -14,3 +14,4 @@ doc/edoc-info
 doc/doc
 tests/
 /erl_cache
+.rebar3
