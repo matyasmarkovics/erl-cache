@@ -205,7 +205,7 @@ get(Name, Key, Opts) ->
     end.
 
 %% @doc Retrieves the stats associated with a cache instance
--spec get_stats(name()) -> {ok, cache_stats()}  | {error, invalid_opt_error()}.
+-spec get_stats(name()) -> cache_stats() | {error, invalid_opt_error()}.
 %% @end
 get_stats(Name) ->
     case is_cache_server(Name) of
