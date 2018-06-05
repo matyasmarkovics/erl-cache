@@ -89,7 +89,10 @@ default_get_set_evict() ->
     ?assertEqual({error, {invalid, cache_name}}, erl_cache:evict(nowhere, test_key)),
     ?assertEqual({error, not_found}, get_from_cache(test_key, [], 1)),
     ?assertEqual(ok, evict_from_cache(test_key2, [{wait_until_done, true}])),
-    ?assertEqual({error, not_found}, get_from_cache(test_key2, [])).
+    ?assertEqual({error, not_found}, get_from_cache(test_key2, [])),
+    ?assertEqual(ok, set_in_cache(test_key, <<"test_value">>)),
+    ?assertEqual(ok, evict_from_cache()),
+    ?assertEqual({error, not_found}, get_from_cache(test_key, [], 1)).
 
 refresh_undefined() ->
     SetOpts = [{refresh_callback, undefined}, {validity, 50}, {evict, 300}],
@@ -258,6 +261,9 @@ get_from_cache(K, Opts, 0) ->
 get_from_cache(K, Opts, SleepBefore) ->
     timer:sleep(SleepBefore),
     apply(erl_cache, get, [?TEST_CACHE, K, Opts]).
+
+evict_from_cache() ->
+    apply(erl_cache, evict_all, [?TEST_CACHE]).
 
 evict_from_cache(K) ->
     apply(erl_cache, evict, [?TEST_CACHE, K]).
