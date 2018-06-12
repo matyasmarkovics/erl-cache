@@ -16,7 +16,8 @@
     set/9,
     evict/3,
     check_mem_usage/1,
-    get_stats/1
+    get_stats/1,
+    evict_all/2
 ]).
 
 %% ==================================================================
@@ -123,6 +124,11 @@ get_stats(Name) ->
 is_valid_name(Name) ->
     not lists:member(get_table_name(Name), ets:all()).
 
+-spec evict_all(erl_cache:name(), boolean()) -> ok.
+evict_all(Name, WaitUntilDone) ->
+    Args = [Name, get_table_name(Name)],
+    operate_cache(fun do_evict_all/2, Args, WaitUntilDone).
+
 %% ==================================================================
 %% gen_server Function Definitions
 %% ==================================================================
@@ -183,11 +189,15 @@ code_change(_OldVsn, State, _Extra) ->
 %% @private
 -spec operate_cache(erl_cache:name(), function(), list(), atom(), boolean()) -> ok.
 operate_cache(Name, Function, Input, Stat, Sync) ->
+    operate_cache(Function, Input, Sync),
+    gen_server:cast(Name, {increase_stat, Stat}).
+
+operate_cache(Function, Input, Sync) ->
     case Sync of
         true -> apply(Function, Input);
         false -> spawn_link(erlang, apply, [Function, Input])
     end,
-    gen_server:cast(Name, {increase_stat, Stat}).
+    ok.
 
 %% @private
 -spec do_set(erl_cache:name(), #cache_entry{}) -> ok.
@@ -200,6 +210,10 @@ do_set(Name, Entry) ->
 do_evict(Name, Key) ->
     true = ets:delete(get_table_name(Name), Key),
     ok.
+
+do_evict_all(Name, TableName) ->
+    Deleted = ets:select_delete(TableName, [{'_', [], [true]}]),
+    gen_server:cast(Name, {increase_stat, evict, Deleted}).
 
 %% @private
 -spec purge_cache(erl_cache:name()) -> ok.
@@ -220,7 +234,6 @@ purge_cache( Name, TableName, Now ) ->
     ?DEBUG("~p cache purged in ~bms", [Name, _Time]),
     gen_server:cast(Name, {increase_stat, evict, Deleted}),
     ok.
-
 
 %% @private
 -spec refresh(erl_cache:name(), #cache_entry{}, erl_cache:wait_for_refresh()) ->

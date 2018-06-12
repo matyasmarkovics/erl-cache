@@ -23,7 +23,8 @@
         start_link/0,
         stop_cache/1, start_cache/2,
         set_cache_defaults/2, get_cache_option/2,
-        evict/2, evict/3
+        evict/2, evict/3,
+        evict_all/1, evict_all/2
     ]).
 
 -ignore_xref([
@@ -253,6 +254,25 @@ evict(Name, Key, Opts) ->
             erl_cache_server:evict(Name, Key,
                                    proplists:get_value(wait_until_done, ValidatedOpts));
         {error, _}=E -> E
+    end.
+
+%% @see evict/2
+-spec evict_all(name()) -> ok | {error, invalid_opt_error()}.
+%% @end
+evict_all(Name) ->
+    evict_all(Name, []).
+
+%% @doc Forces eviction of all cache entries from cache instance
+-spec evict_all(name(), [cache_evict_opt()]) ->
+    ok | {error, invalid_opt_error()}.
+%% @end
+evict_all(Name, Opts) ->
+    case validate_opts(Opts, get_name_defaults(Name)) of
+        {ok, ValidatedOpts} ->
+            WaitUntilDone = proplists:get_value(wait_until_done, ValidatedOpts),
+            erl_cache_server:evict_all(Name, WaitUntilDone);
+        {error, _} = Error ->
+            Error
     end.
 
 %% ====================================================================
