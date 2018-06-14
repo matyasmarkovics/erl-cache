@@ -279,7 +279,7 @@ check_mem_usage(Name) ->
 
 check_mem_usage( Name, CurrentWords ) ->
     MaxMB = erl_cache:get_cache_option(Name, max_cache_size),
-    CurrentMB = erlang:trunc((CurrentWords * erlang:system_info(wordsize)) / (1024*1024*8)),
+    CurrentMB = (CurrentWords * erlang:system_info(wordsize)) div (1024 * 1024),
     case MaxMB /= undefined andalso CurrentMB > MaxMB of
         true ->
             ?WARNING("~p exceeded memory limit of ~pMB: ~pMB in use! Forcing eviction...",

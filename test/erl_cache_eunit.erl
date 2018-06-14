@@ -169,7 +169,8 @@ mem_limit_forces_purge() ->
     timer:sleep(50),
     Stats = erl_cache:get_stats(?TEST_CACHE2),
     ?assertEqual(1, proplists:get_value(entries, Stats)),
-    V2 = [97 || _ <- lists:seq(1, 1024*1024*2)],
+    % Add ~2 MB cache entry. The size of V2 is 1 + 2 * (1024 * 1024 div wordsize) words
+    V2 = [0 || _ <- lists:seq(1, 1024 * 1024 div erlang:system_info(wordsize))],
     erl_cache:set(?TEST_CACHE2, k2, V2, [{validity, 1}, {evict, 0}, {wait_until_done, true}]),
     erl_cache:set(?TEST_CACHE2, k3, v3, [{validity, 1000}, {evict, 0}, {wait_until_done, true}]),
     timer:sleep(100),
