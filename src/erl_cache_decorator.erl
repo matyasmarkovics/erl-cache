@@ -14,7 +14,7 @@ cache_pt(Fun, Args, {Module, FunctionAtom, Name, Opts}) ->
         KeyModule when is_atom(KeyModule), KeyModule /= undefined ->
             apply(KeyModule, generate_key, [Name, Module, FunctionAtom, Args]);
         _ ->
-            {decorated, Module, FunctionAtom, erlang:phash2(Args)}
+            {decorated, Module, FunctionAtom, crypto:hash(sha, erlang:term_to_binary(Args))}
     end,
     FromCache = erl_cache:get(Name, Key, FinalOpts),
     case FromCache of
