@@ -1,13 +1,14 @@
 {application, erl_cache,
  [
-  {description, ""},
+  {description, "A generic in-node caching library with memoization support"},
   {vsn, git},
-  {registered, []},
   {applications, [
                   kernel,
                   stdlib,
                   crypto
                  ]},
   {mod, { erl_cache_app, []}},
-  {env, []}
+  {env, []},
+  {licenses, ["Apache 2"]},
+  {links, [{"Github", "https://github.com/alertlogic/erl-cache"}]}
  ]}.
