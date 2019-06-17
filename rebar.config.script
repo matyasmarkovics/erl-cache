@@ -2,7 +2,7 @@ ExtraDeps = [
     {basho_bench, "", {git, "git://github.com/spilgames/basho_bench.git", {tag, "0.1-56-g3d5c35d386f4"}}}
 ],
 
-case os:getenv("REBAR_BENCH") of
+Config0 = case os:getenv("REBAR_BENCH") of
     false ->
         CONFIG;
     _ ->
@@ -13,4 +13,12 @@ case os:getenv("REBAR_BENCH") of
             false ->
                 CONFIG ++ [{deps, ExtraDeps}]
         end
+end,
+case erlang:function_exported(rebar3, main, 1) of
+    true ->
+        {deps, Deps1} = lists:keyfind(deps, 1, Config0),
+        NewDeps = lists:keyreplace(decorator_pt, 1, Deps1, {decorator_pt, "1.0.3-alertlogic"}),
+        lists:keyreplace(deps, 1, Config0, {deps, NewDeps});
+    false ->
+        Config0
 end.
