@@ -1,0 +1,4 @@
+[{<<"decorator_pt">>,
+  {git,"https://github.com/alertlogic/erl-decorator-pt.git",
+       {ref,"146e5ce4e7b9bd4bd3dde1d3387959dd04ef189d"}},
+  0}].
