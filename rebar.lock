@@ -1,4 +1,6 @@
-[{<<"decorator_pt">>,
-  {git,"https://github.com/alertlogic/erl-decorator-pt.git",
-       {ref,"146e5ce4e7b9bd4bd3dde1d3387959dd04ef189d"}},
-  0}].
+{"1.1.0",
+[{<<"decorator_pt">>,{pkg,<<"decorator_pt">>,<<"1.0.3-alertlogic">>},0}]}.
+[
+{pkg_hash,[
+ {<<"decorator_pt">>, <<"4B103FE93F208F3903DD4218CA1B69548BCE1FE2518CAAE6C0C7DF50FEEFECAE">>}]}
+].
