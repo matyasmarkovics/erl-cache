@@ -358,8 +358,12 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, cache_opts()} | {error, invalid_opt_error()}.
 validate_opts(_, undefined) ->
     {error, {invalid, cache_name}};
+validate_opts([], Defaults) when Defaults =/= [] ->
+    %% Only called with `Defaults == []' during initialization of options.
+    %% Otherwise `Defaults' is passed as cached, validated, complete default set.
+    {ok, Defaults};
 validate_opts(Opts, Defaults) ->
-    CacheOpts = [validity, evict, refresh_callback, wait_for_refresh, max_cache_size,
+    CacheOpts = [wait_for_refresh, validity, evict, refresh_callback, max_cache_size,
                  wait_until_done, evict_interval, error_validity, is_error_callback,
                  mem_check_interval, key_generation],
     ValidationResults = [{K, validate_value(K, Opts, Defaults)} || K <- CacheOpts],
