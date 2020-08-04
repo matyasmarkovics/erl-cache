@@ -27,17 +27,20 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--ifdef(namespace_types).
--type stats_dict() :: dict:dict().
--else.
--type stats_dict() :: dict().
--endif.
+-record(stats, {
+    hit     = 0 :: non_neg_integer(),
+    miss    = 0 :: non_neg_integer(),
+    overdue = 0 :: non_neg_integer(),
+    evict   = 0 :: non_neg_integer(),
+    set     = 0 :: non_neg_integer()
+}).
 
+-type stats() :: #stats{}.
 
 -record(state, {
-    name::erl_cache:name(),                     %% The name of this cache instance
-    cache::ets:tid(),                           %% Holds cache
-    stats::stats_dict()                         %% Statistics about cache hits
+    name  :: erl_cache:name(), %% The name of this cache instance
+    cache :: ets:tid(),        %% Holds cache
+    stats :: stats()           %% Statistics about cache hits
 }).
 
 -record(cache_entry, {
@@ -143,13 +146,13 @@ init(Name) ->
     {ok, _} = timer:send_after(EvictInterval, Name, purge_cache),
     MemCheckInterval = erl_cache:get_cache_option(Name, mem_check_interval),
     {ok, _} = timer:apply_after(MemCheckInterval, ?MODULE, check_mem_usage, [Name]),
-    {ok, #state{name=Name, cache=CacheTid, stats=dict:new()}}.
+    {ok, #state{name=Name, cache=CacheTid, stats=#stats{}}}.
 
 %% @private
 -spec handle_call(term(), term(), #state{}) ->
     {reply, Data::any(), #state{}}.
 handle_call(get_stats, _From, #state{stats=Stats} = State) ->
-    {reply, dict:to_list(Stats), State};
+    {reply, stats_to_list(Stats), State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -310,14 +313,29 @@ is_error_value(F, Value) when is_function(F) ->
     F(Value).
 
 %% @private
--spec update_stats(hit|miss|overdue|evict|set, stats_dict()) -> stats_dict().
+-spec update_stats(hit|miss|overdue|evict|set, stats()) -> stats().
 update_stats(Stat, Stats) ->
     update_stats(Stat, 1, Stats).
 
 %% @private
--spec update_stats(hit|miss|overdue|evict|set, pos_integer(), stats_dict()) -> stats_dict().
-update_stats(Stat, N, Stats) ->
-    dict:update_counter(total_ops, N, dict:update_counter(Stat, N, Stats)).
+-spec update_stats(hit|miss|overdue|evict|set, pos_integer(), stats()) -> stats().
+update_stats(hit,     N, S) -> S#stats{hit       = S#stats.hit     + N};
+update_stats(miss,    N, S) -> S#stats{miss      = S#stats.miss    + N};
+update_stats(overdue, N, S) -> S#stats{overdue   = S#stats.overdue + N};
+update_stats(evict,   N, S) -> S#stats{evict     = S#stats.evict   + N};
+update_stats(set,     N, S) -> S#stats{set       = S#stats.set     + N}.
+
+stats_to_list(#stats{hit     = Hit,
+                     miss    = Miss,
+                     overdue = Overdue,
+                     evict   = Evict,
+                     set     = Set}) ->
+    [{total_ops, Hit + Miss + Overdue + Evict + Set},
+     {hit,       Hit},
+     {miss,      Miss},
+     {overdue,   Overdue},
+     {evict,     Evict},
+     {set,       Set}].
 
 %% @private
 -spec now_ms() -> pos_integer().
