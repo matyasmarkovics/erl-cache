@@ -80,9 +80,10 @@
 -type cache_opts()::[cache_get_opt() | cache_set_opt() | cache_evict_opt()
                      | {evict_interval, evict_interval()} | cache_server_opt()].
 
--type cache_stat()::{memory, pos_integer()} | {size, non_neg_integer()} | {hit, non_neg_integer()} |
-                    {evict, non_neg_integer()} | {overdue, non_neg_integer()} |
-                    {miss, non_neg_integer()}.
+-type cache_stat()::{memory, pos_integer()} | {entries, non_neg_integer()} |
+                    {hit, non_neg_integer()} | {evict, non_neg_integer()} |
+                    {overdue, non_neg_integer()} | {miss, non_neg_integer()} |
+                    {set, non_neg_integer()} | {total_ops, non_neg_integer()}.
 -type cache_stats()::[cache_stat()].
 
 -type config_key()::validity | evict | refresh_callback | wait_for_refresh | max_cache_size
@@ -477,4 +478,3 @@ get_name_defaults(Name) ->
         [{Name, Opts}] -> Opts;
         [] -> undefined
     end.
-
