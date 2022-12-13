@@ -16,6 +16,7 @@
 
 -export([
         get/2, get/3,
+        match/2, match/3,
         get_stats/1,
         list_cache_servers/0,
         set/3, set/4,
@@ -204,6 +205,17 @@ get(Name, Key, Opts) ->
         {ok, ValidatedOpts} ->
             erl_cache_server:get(Name, Key, proplists:get_value(wait_for_refresh, ValidatedOpts));
         {error, _}=E -> E
+    end.
+
+match(Name, Key) ->
+    match(Name, Key, []).
+
+match(Name, Key, Opts) ->
+    case validate_opts(Opts, get_name_defaults(Name)) of
+        {ok, ValidatedOpts} ->
+            WaitForRefresh = proplists:get_value(wait_for_refresh, ValidatedOpts),
+            erl_cache_server:match(Name, Key, WaitForRefresh);
+        {error, _} = E -> E
     end.
 
 %% @doc Retrieves the stats associated with a cache instance

@@ -47,7 +47,8 @@ get_set_evict_test_() ->
             {"Evict interval cache cleanup + correct stats", fun evict_interval/0},
             {"Mem limit with tiny interval", fun mem_limit_forces_purge/0},
             {"Parse transform basic usage", fun parse_transform/0},
-            {"Configurable callback for keys", fun key_generation/0}
+            {"Configurable callback for keys", fun key_generation/0},
+            {"Get value by mathcing partial key", fun partial_key_match/0}
     ]}.
 
 %% Test Sets
@@ -241,6 +242,19 @@ key_generation() ->
 generate_key(Cache, Module, _Function, Args) ->
     {Cache, Module, Args}.
 
+partial_key_match() ->
+    ?assertEqual(ok, set_in_cache({test_a, key_1}, <<"test_value_1">>)),
+    ?assertEqual(ok, set_in_cache({test_a, key_2}, <<"test_value_2">>)),
+    ?assertEqual(ok, set_in_cache({test_b, key_1}, <<"test_value_3">>)),
+    timer:sleep(1),
+    ?assertEqual({ok, [<<"test_value_1">>, <<"test_value_2">>]},
+                 sorted(erl_cache:match(?TEST_CACHE, {test_a, '_'}, []))),
+    ?assertEqual({ok, [<<"test_value_1">>, <<"test_value_3">>]},
+                 sorted(erl_cache:match(?TEST_CACHE, {'_', key_1}, []))),
+    ?assertEqual({error, not_found},
+                 erl_cache:match(?TEST_CACHE, {'_', key_a}, [])).
+
+
 %% Internal functions
 
 set_in_cache(K, V) ->
@@ -289,3 +303,8 @@ sum(A, B) when A > 5 ->
                      {key_generation, ?MODULE}, {wait_until_done, true}]).
 function_name(arg1, "arg2") ->
     value.
+
+sorted({OK, Results}) when is_list(Results) ->
+    {OK, lists:sort(Results)};
+sorted(Any) ->
+    Any.
