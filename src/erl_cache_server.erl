@@ -77,10 +77,12 @@ get(Name, Key, WaitForRefresh) ->
                 false -> {error, not_found}
             end;
         [] ->
-            gen_server:cast(Name, {increase_stat, miss}),
+            send_stat(Name, Now, #cache_entry{}),
             {error, not_found}
     end.
 
+send_stat(Name, _Now, #cache_entry{key=undefined}) ->
+    gen_server:cast(Name, {increase_stat, miss});
 send_stat(Name, Now, #cache_entry{validity=Validity}) when Now < Validity ->
     gen_server:cast(Name, {increase_stat, hit});
 send_stat(Name, Now, #cache_entry{evict=Evict}) when Now < Evict ->
@@ -101,11 +103,13 @@ match(Name, Key, WaitForRefresh) ->
     Now = now_ms(),
     case ets:match_object(get_table_name(Name), #cache_entry{key = Key, _ = '_'}) of
         [] ->
-            gen_server:cast(Name, {increase_stat, miss}),
+            send_stat(Name, Now, #cache_entry{}),
             {error, not_found};
         Matches ->
-            lists:foreach(fun(E) -> send_stat(Name, Now, E) end, Matches),
-            IsValid = fun(E) -> get_valid_value(Name, WaitForRefresh, Now, E) end,
+            IsValid = fun(E) ->
+                          send_stat(Name, Now, E),
+                          get_valid_value(Name, WaitForRefresh, Now, E)
+                      end,
             case lists:filtermap(IsValid, Matches) of
                 [] -> {error, not_found};
                 Values -> {ok, Values}
@@ -280,7 +284,7 @@ refresh(Name, #cache_entry{} = Entry, false) ->
 do_refresh(Name, #cache_entry{} = Entry, WaitForRefresh) ->
     #cache_entry{key=Key, validity_delta=ValidityDelta, evict_delta=EvictDelta,
                  refresh_callback=Callback, is_error_callback=IsErrorCb} = Entry,
-    ?DEBUG("Refreshing overdue key ~p", [Key]),
+    ?DEBUG("Refreshing overdue key ~p in cache: ~p", [Key, Name]),
     NewVal = do_apply(Callback),
     Now = now_ms(),
     RefreshedEntry = case is_error_value(IsErrorCb, NewVal) of
