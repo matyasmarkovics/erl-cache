@@ -12,6 +12,7 @@
 -export([
     start_link/1,
     get/3,
+    match/3,
     is_valid_name/1,
     set/9,
     evict/3,
@@ -69,22 +70,50 @@ start_link(Name) ->
 get(Name, Key, WaitForRefresh) ->
     Now = now_ms(),
     case ets:lookup(get_table_name(Name), Key) of
-        [#cache_entry{validity=Validity, value=Value}] when Now < Validity ->
-            gen_server:cast(Name, {increase_stat, hit}),
-            {ok, Value};
-        [#cache_entry{evict=Evict, value=Value, refresh_callback=undefined}] when Now < Evict ->
-            gen_server:cast(Name, {increase_stat, overdue}),
-            {ok, Value};
-        [#cache_entry{evict=Evict, refresh_callback=Cb}=Entry] when Now < Evict, Cb /=undefined ->
-            ?DEBUG("Refreshing overdue key ~p", [Key]),
-            gen_server:cast(Name, {increase_stat, overdue}),
-            {ok, NewVal} = refresh(Name, Entry, WaitForRefresh),
-            {ok, NewVal};
-        [#cache_entry{value=_ExpiredValue}] ->
-            {error, not_found};
+        [Entry] ->
+            send_stat(Name, Now, Entry),
+            case get_valid_value(Name, WaitForRefresh, Now, Entry) of
+                {true, Value} -> {ok, Value};
+                false -> {error, not_found}
+            end;
         [] ->
-            gen_server:cast(Name, {increase_stat, miss}),
+            send_stat(Name, Now, #cache_entry{}),
             {error, not_found}
+    end.
+
+send_stat(Name, _Now, #cache_entry{key=undefined}) ->
+    gen_server:cast(Name, {increase_stat, miss});
+send_stat(Name, Now, #cache_entry{validity=Validity}) when Now < Validity ->
+    gen_server:cast(Name, {increase_stat, hit});
+send_stat(Name, Now, #cache_entry{evict=Evict}) when Now < Evict ->
+    gen_server:cast(Name, {increase_stat, overdue});
+send_stat(_Name, _Now,  _) ->
+    ok.
+
+get_valid_value(_Name, _IsSync, Now, #cache_entry{validity=Validity} = E) when Now < Validity ->
+    {true, E#cache_entry.value};
+get_valid_value(Name, IsSync, Now, #cache_entry{evict=Evict} = E) when Now < Evict ->
+    refresh(Name, E, IsSync);
+get_valid_value(_Name, _IsSync, _Now, #cache_entry{value=_ExpiredValue}) ->
+    false.
+
+-spec match(erl_cache:name(), erl_cache:key(), erl_cache:wait_for_refresh()) ->
+    {ok, erl_cache:value()} | {error, not_found}.
+match(Name, Key, WaitForRefresh) ->
+    Now = now_ms(),
+    case ets:match_object(get_table_name(Name), #cache_entry{key = Key, _ = '_'}) of
+        [] ->
+            send_stat(Name, Now, #cache_entry{}),
+            {error, not_found};
+        Matches ->
+            IsValid = fun(E) ->
+                          send_stat(Name, Now, E),
+                          get_valid_value(Name, WaitForRefresh, Now, E)
+                      end,
+            case lists:filtermap(IsValid, Matches) of
+                [] -> {error, not_found};
+                Values -> {ok, Values}
+            end
     end.
 
 -spec set(erl_cache:name(), erl_cache:key(), erl_cache:value(), pos_integer(), non_neg_integer(),
@@ -167,7 +196,7 @@ handle_cast(_Msg, State) ->
 
 %% @private
 -spec handle_info(any(), #state{}) -> {noreply, #state{}}.
-handle_info(purge_cache, #state{name=Name}=State) ->
+handle_info(purge_cache, #state{name=Name} = State) ->
     purge_cache(Name),
     EvictInterval = erl_cache:get_cache_option(Name, evict_interval),
     {ok, _} = timer:send_after(EvictInterval, Name, purge_cache),
@@ -241,21 +270,21 @@ purge_cache( Name, TableName, Now ) ->
 %% @private
 -spec refresh(erl_cache:name(), #cache_entry{}, erl_cache:wait_for_refresh()) ->
     {ok, erl_cache:value()}.
-refresh(Name, #cache_entry{refresh_callback=Callback}=Entry, true) when Callback/=undefined ->
-    NewVal = do_refresh(Name, Entry, true),
-    {ok, NewVal};
-refresh(Name, #cache_entry{value=Value, refresh_callback=Callback}=Entry, false)
-        when Callback/=undefined ->
-    F = fun () -> do_refresh(Name, Entry, false) end,
-    _ = spawn(F),
-    {ok, Value}.
+refresh(_Name, #cache_entry{refresh_callback=undefined} = Entry, _WaitForRefresh) ->
+    {true, Entry#cache_entry.value};
+refresh(Name, #cache_entry{} = Entry, true) ->
+    {true, do_refresh(Name, Entry, true)};
+refresh(Name, #cache_entry{} = Entry, false) ->
+    spawn(fun () -> do_refresh(Name, Entry, false) end),
+    {true, Entry#cache_entry.value}.
 
 %% @private
 -spec do_refresh(erl_cache:name(), #cache_entry{}, erl_cache:wait_for_refresh()) ->
     erl_cache:value().
-do_refresh(Name, #cache_entry{key=Key, validity_delta=ValidityDelta, evict_delta=EvictDelta,
-                              refresh_callback=Callback, is_error_callback=IsErrorCb}=Entry,
-           WaitForRefresh) ->
+do_refresh(Name, #cache_entry{} = Entry, WaitForRefresh) ->
+    #cache_entry{key=Key, validity_delta=ValidityDelta, evict_delta=EvictDelta,
+                 refresh_callback=Callback, is_error_callback=IsErrorCb} = Entry,
+    ?DEBUG("Refreshing overdue key ~p in cache: ~p", [Key, Name]),
     NewVal = do_apply(Callback),
     Now = now_ms(),
     RefreshedEntry = case is_error_value(IsErrorCb, NewVal) of
