@@ -7,5 +7,9 @@
 %%
 %% The way to fix this issue is modifying how erl_decorator_pt deals with the
 %% intermediate code representation.
--callback generate_key(CacheInstance::erl_cache:name(), Module::atom(),
-                       Function::atom(), Args::[term()]) -> erl_cache:key().
+-callback generate_key(Name, Module, Function, Args) -> Key when
+      Name::erl_cache:name(),
+      Module::module(),
+      Function::atom(),
+      Args::[term()],
+      Key::erl_cache:key().
