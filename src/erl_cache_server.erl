@@ -37,6 +37,7 @@
 }).
 
 -type stats() :: #stats{}.
+-type stats_field() :: hit|miss|overdue|evict|set.
 
 -record(state, {
     name  :: erl_cache:name(), %% The name of this cache instance
@@ -45,17 +46,19 @@
 }).
 
 -record(cache_entry, {
-    key::erl_cache:key(),
-    value::erl_cache:value(),
-    created::pos_integer(),
-    validity::pos_integer(),
-    evict::pos_integer(),
-    validity_delta::erl_cache:validity(),
-    error_validity_delta::erl_cache:error_validity(),
-    evict_delta::erl_cache:evict(),
-    refresh_callback::erl_cache:refresh_callback(),
-    is_error_callback::erl_cache:is_error_callback()
+    key::undefined|'_'|erl_cache:key(),
+    value::undefined|'_'|erl_cache:value(),
+    created::undefined|'_'|pos_integer(),
+    validity::undefined|'_'|pos_integer(),
+    evict::undefined|'_'|'$1'|pos_integer(),
+    validity_delta::undefined|'_'|erl_cache:validity(),
+    error_validity_delta::undefined|'_'|erl_cache:error_validity(),
+    evict_delta::undefined|'_'|erl_cache:evict(),
+    refresh_callback::undefined|'_'|erl_cache:refresh_callback(),
+    is_error_callback::undefined|'_'|erl_cache:is_error_callback()
 }).
+
+-type cache_operation()::fun((erl_cache:cache_name(), #cache_entry{}) -> non_neg_integer()).
 
 %% ==================================================================
 %% API Function Definitions
@@ -138,11 +141,11 @@ set(Name, Key, Value, ValidityDelta, EvictDelta,
         refresh_callback = RefreshCb,
         is_error_callback = IsErrorCb
     },
-    operate_cache(Name, fun do_set/2, [Name, Entry], set, WaitTillSet).
+    operate_cache(Name, fun do_set/2, Entry, set, WaitTillSet).
 
 -spec evict(erl_cache:name(), erl_cache:key(), erl_cache:wait_until_done()) -> ok.
 evict(Name, Key, WaitUntilDone) ->
-    operate_cache(Name, fun do_evict/2, [Name, Key], evict, WaitUntilDone).
+    operate_cache(Name, fun do_evict/2, #cache_entry{key=Key, _='_'}, evict, WaitUntilDone).
 
 -spec get_stats(erl_cache:name()) -> erl_cache:cache_stats().
 get_stats(Name) ->
@@ -158,8 +161,7 @@ is_valid_name(Name) ->
 
 -spec evict_all(erl_cache:name(), boolean()) -> ok.
 evict_all(Name, WaitUntilDone) ->
-    Args = [Name, get_table_name(Name)],
-    operate_cache(fun do_evict_all/2, Args, WaitUntilDone).
+    operate_cache(Name, fun do_evict_all/2, #cache_entry{_='_'}, evict, WaitUntilDone).
 
 %% ==================================================================
 %% gen_server Function Definitions
@@ -219,85 +221,85 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 
 %% @private
--spec operate_cache(erl_cache:name(), function(), list(), atom(), boolean()) -> ok.
-operate_cache(Name, Function, Input, Stat, Sync) ->
-    operate_cache(Function, Input, Sync),
-    gen_server:cast(Name, {increase_stat, Stat}).
-
-operate_cache(Function, Input, Sync) ->
-    case Sync of
-        true -> apply(Function, Input);
-        false -> spawn_link(erlang, apply, [Function, Input])
-    end,
+-spec operate_cache(Name, Function, Entry, Stat, boolean()) -> ok when
+      Name::erl_cache:name(),
+      Function::cache_operation(),
+      Entry::#cache_entry{},
+      Stat::stats_field().
+operate_cache(Name, Function, Entry, Stat, true) ->
+    N = Function(Name, Entry),
+    ok = gen_server:cast(Name, {increase_stat, Stat, N});
+operate_cache(Name, Function, Entry, Stat, false) ->
+    spawn_link(fun() -> operate_cache(Name, Function, Entry, Stat, true) end),
     ok.
 
 %% @private
--spec do_set(erl_cache:name(), #cache_entry{}) -> ok.
+-spec do_set(erl_cache:name(), #cache_entry{}) -> non_neg_integer().
 do_set(Name, Entry) ->
     true = ets:insert(get_table_name(Name), Entry),
-    ok.
+    1.
 
 %% @private
--spec do_evict(erl_cache:name(), erl_cache:key()) -> ok.
-do_evict(Name, Key) ->
+-spec do_evict(erl_cache:name(), #cache_entry{}) -> non_neg_integer().
+do_evict(Name, #cache_entry{key=Key}) ->
     true = ets:delete(get_table_name(Name), Key),
-    ok.
+    1.
 
-do_evict_all(Name, TableName) ->
-    Deleted = ets:select_delete(TableName, [{'_', [], [true]}]),
-    gen_server:cast(Name, {increase_stat, evict, Deleted}).
+-spec do_evict_all(erl_cache:name(), #cache_entry{}) -> non_neg_integer().
+do_evict_all(Name, _Entry) ->
+    ets:select_delete(get_table_name(Name), [{'_', [], [true]}]).
 
 %% @private
 -spec purge_cache(erl_cache:name()) -> ok.
 purge_cache(Name) ->
-    Now = now_ms(),
-    TableName = get_table_name(Name),
+    Owner = ets:info(get_table_name(Name), owner),
+    MatchPattern = #cache_entry{_='_'},
     %% make sure the table has not disappeared out from under us
-    case ets:info(TableName, type) of
-        undefined -> ok;
-        _ -> purge_cache( Name, TableName, Now )
-    end.
-
-purge_cache( Name, TableName, Now ) ->
-    {_Time, Deleted} =
-        timer:tc( ets, select_delete,
-                  [TableName, [{#cache_entry{evict='$1', _='_'},
-                                [{'<', '$1', Now}], [true]}]] ),
-    ?DEBUG("~p cache purged in ~bms", [Name, _Time]),
-    gen_server:cast(Name, {increase_stat, evict, Deleted}),
+    [operate_cache(Name, fun tc_purge_cache/2, MatchPattern, evict, true) || is_pid(Owner)],
     ok.
+
+tc_purge_cache(Name, EntryPattern) ->
+    {_Time, Deleted} = timer:tc(fun do_purge_cache/2, [Name, EntryPattern]),
+    ?DEBUG("~p cache purged in ~bms", [Name, _Time]),
+    Deleted.
+
+do_purge_cache(Name, EntryPattern) ->
+    Now = now_ms(),
+    MatchPattern = EntryPattern#cache_entry{evict='$1'},
+    Conditionals = [{'<', '$1', Now}],
+    ets:select_delete(get_table_name(Name), [{MatchPattern, Conditionals, [true]}]).
 
 %% @private
 -spec refresh(erl_cache:name(), #cache_entry{}, erl_cache:wait_for_refresh()) ->
-    {ok, erl_cache:value()}.
+    {true, erl_cache:value()}.
 refresh(_Name, #cache_entry{refresh_callback=undefined} = Entry, _WaitForRefresh) ->
     {true, Entry#cache_entry.value};
 refresh(Name, #cache_entry{} = Entry, true) ->
-    {true, do_refresh(Name, Entry, true)};
+    NewEntry = maybe_refresh(Name, Entry),
+    operate_cache(Name, fun do_set/2, NewEntry, set, false),
+    {true, NewEntry#cache_entry.value};
 refresh(Name, #cache_entry{} = Entry, false) ->
-    spawn(fun () -> do_refresh(Name, Entry, false) end),
+    operate_cache(Name, fun(N, E) -> do_set(N, maybe_refresh(N, E)) end, Entry, set, false),
     {true, Entry#cache_entry.value}.
 
 %% @private
--spec do_refresh(erl_cache:name(), #cache_entry{}, erl_cache:wait_for_refresh()) ->
-    erl_cache:value().
-do_refresh(Name, #cache_entry{} = Entry, WaitForRefresh) ->
-    #cache_entry{key=Key, validity_delta=ValidityDelta, evict_delta=EvictDelta,
-                 refresh_callback=Callback, is_error_callback=IsErrorCb} = Entry,
-    ?DEBUG("Refreshing overdue key ~p in cache: ~p", [Key, Name]),
-    NewVal = do_apply(Callback),
-    Now = now_ms(),
-    RefreshedEntry = case is_error_value(IsErrorCb, NewVal) of
+-spec maybe_refresh(erl_cache:name(), #cache_entry{}) -> #cache_entry{}.
+maybe_refresh(Name, #cache_entry{refresh_callback=Callback, is_error_callback=IsErrorCb} = E) ->
+    ?DEBUG("Refreshing overdue key ~p in cache: ~p", [E#cache_entry.key, Name]),
+    % Consider wraping in try-catch
+    Value = do_apply(Callback),
+    case is_error_value(IsErrorCb, Value) of
         false ->
-            Entry#cache_entry{value=NewVal, validity=Now+ValidityDelta,
-                              evict=Now+ValidityDelta+EvictDelta};
+            Now = now_ms(),
+            Validity = Now+E#cache_entry.validity_delta,
+            Evict = Validity+E#cache_entry.evict_delta,
+            E#cache_entry{value=Value, validity=Validity, evict=Evict};
         true ->
             ?NOTICE("Error refreshing ~p at ~p: ~p. Disabling auto refresh...",
-                    [Key, Name, NewVal]),
-            Entry#cache_entry{refresh_callback=undefined}
-    end,
-    ok = operate_cache(Name, fun do_set/2, [Name, RefreshedEntry], set, WaitForRefresh),
-    NewVal.
+                    [E#cache_entry.key, Name, Value]),
+            % Consider setting validity by error_validity_delta
+            E#cache_entry{refresh_callback=undefined}
+    end.
 
 %% @private
 -spec check_mem_usage(erl_cache:name()) -> ok.
@@ -324,7 +326,7 @@ check_mem_usage( Name, CurrentWords ) ->
     ok.
 
 %% @private
--spec do_apply(function() | mfa() | {function(), [any()]}) -> term().
+-spec do_apply(erl_cache:refresh_callback()) -> term().
 do_apply({M, F, A}) when is_atom(M), is_atom(F), is_list(A) ->
     apply(M, F, A);
 do_apply({F, A}) when is_function(F, length(A)) ->

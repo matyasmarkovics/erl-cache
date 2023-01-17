@@ -118,6 +118,8 @@ refresh_overdue_async_mfa() ->
     % The value should have been asynchronously refreshed
     ?assertMatch({ok, T} when is_tuple(T) andalso T/=TestValue,
                  get_from_cache(test_key, [{wait_for_refresh, false}], 10)),
+    ?assertMatch({ok, T} when is_tuple(T) andalso T/=TestValue,
+                 get_from_cache(test_key, [{wait_for_refresh, true}], 10)),
     % At this point the value should have been evicted
     ?assertEqual({error, not_found}, get_from_cache(test_key, [], 400)).
 
