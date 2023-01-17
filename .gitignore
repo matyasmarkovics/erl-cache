@@ -16,3 +16,4 @@ doc/doc
 tests/
 /erl_cache
 .rebar3
+TEST-*.xml
