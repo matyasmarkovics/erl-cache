@@ -91,7 +91,7 @@
                   | wait_until_done | evict_interval | error_validity | is_error_callback
                   | mem_check_interval | key_generation.
 
--type callback() :: function() | mfa() | {function(), [any()]}.
+-type callback() :: function() | {module(), atom(), [term()]} | {function(), [term()]}.
 
 -export_type([
         name/0, key/0, value/0, validity/0, evict/0, evict_interval/0, refresh_callback/0,
@@ -165,7 +165,7 @@ set_cache_defaults(Name, CacheOpts) ->
     end.
 
 %% @doc Gets the default value of a cache server option.
--spec get_cache_option(name(), cache_opts()) -> term().
+-spec get_cache_option(name(), config_key()) -> term().
 %% @end
 get_cache_option(Name, Opt) ->
     case ets:lookup(?CACHE_MAP, Name) of
