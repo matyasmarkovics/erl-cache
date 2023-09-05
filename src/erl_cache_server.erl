@@ -58,7 +58,7 @@
     is_error_callback::undefined|'_'|erl_cache:is_error_callback()
 }).
 
--type cache_operation()::fun((erl_cache:cache_name(), #cache_entry{}) -> non_neg_integer()).
+-type cache_operation()::fun((erl_cache:name(), #cache_entry{}) -> non_neg_integer()).
 
 %% ==================================================================
 %% API Function Definitions
