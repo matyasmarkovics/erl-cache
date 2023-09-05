@@ -15,19 +15,13 @@
       Opts::erl_cache:cache_opts(),
       Arity0Fun::fun(() -> term()).
 cache_pt(Fun, Args, {Module, FunctionAtom, Name, Opts}) ->
-    KeyModule = case proplists:get_value(key_generation, Opts) of
-                    undefined -> ?MODULE;
-                    KeyMod when is_atom(KeyMod) -> KeyMod;
-                    _ -> ?MODULE
-                end,
+    KeyModule = key_module(Opts),
     Key = KeyModule:generate_key(Name, Module, FunctionAtom, Args),
-    GetOpts = proplists:lookup_all(wait_for_refresh, Opts),
-    case erl_cache:get(Name, Key, GetOpts) of
+    case erl_cache:get(Name, Key, Opts) of
         {ok, Result} ->
             fun() -> Result end;
         {error, not_found} ->
-            Curried = fun() -> Fun(Args) end,
-            cache_setter(Name, Key, Curried, Opts);
+            cache_setter(Name, Key, Opts, Fun, Args);
         {error, Err} ->
             throw({error, {cache_pt, Err}})
     end.
@@ -41,10 +35,18 @@ generate_key(_Name,  Module, FunctionAtom, Args) ->
 %% ====================================================================
 %% Internal
 %% ====================================================================
-cache_setter(Name, Key, Curried, Opts) ->
-    SetOpts = [{refresh_callback, Curried} | proplists:delete(wait_for_refresh, Opts)],
+key_module(Opts) ->
+    case proplists:get_value(key_generation, Opts) of
+        undefined -> ?MODULE;
+        KeyMod when is_atom(KeyMod) -> KeyMod;
+        _ -> ?MODULE
+    end.
+
+cache_setter(Name, Key, Opts, Fun, Args) ->
+    Callback = fun() -> Fun(Args) end,
+    SetOpts = [{refresh_callback, Callback} | Opts],
     fun() ->
-            Value = Curried(),
+            Value = Callback(),
             ok = erl_cache:set(Name, Key, Value, SetOpts),
             Value
     end.
